@@ -3,5 +3,5 @@
 </script>
 
 {#if auth.username}
-    <h2>Protected Route</h2>
+    <h1>Protected Route</h1>
 {/if}

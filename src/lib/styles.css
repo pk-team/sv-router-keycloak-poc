@@ -1,0 +1,51 @@
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    --border-radius: 8px;
+}
+
+body {
+    font-family: system-ui, sans-serif;
+    font-weight: 300;
+}
+
+main {
+    padding: 2rem;
+}
+
+main h1, main h2, main h3, main h4 {
+    margin-bottom: 1rem;
+}
+
+a {
+    color: rgb(0, 65, 186);
+}
+
+button {
+    display: flex;
+    align-items: center;
+    margin: 0;
+    border: none;
+    outline: none;
+    font-size: inherit;
+    background: none;
+    padding: 0.25rem 0.5rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.icon {
+    width: 20px;
+    height: 20px;
+}
+
+pre {
+    font-size: 1rem;
+    background: #eee;
+    padding: 1rem;
+    border-radius: var(--border-radius);
+}
