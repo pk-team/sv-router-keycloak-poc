@@ -1,8 +1,8 @@
-<script lang="ts">
+<script>
   import { onMount } from 'svelte'
-  import { auth } from '../auth.svelte'
+  import { auth } from '../auth.svelte.ts'
 
-  onMount(async () => {
+  onMount(() => {
     auth.parseLoginCallback()
   })
 </script>

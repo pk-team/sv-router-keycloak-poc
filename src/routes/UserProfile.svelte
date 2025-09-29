@@ -7,7 +7,10 @@
 
     onMount(async () => {
         if (auth.username) {
-            userInfo = await auth.getUserInfo(Cookies.get("access_token"))
+            const accessToken = Cookies.get("access_token")
+            if (accessToken) {
+                userInfo = await auth.getUserInfo(accessToken)
+            }
         }
     })
 </script>

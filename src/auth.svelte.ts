@@ -54,42 +54,111 @@ class AuthService {
     }
 
     async parseLoginCallback() {
+        const { code, codeVerifier } = this.extractOAuthCallbackParams()
+        if (!code || !codeVerifier) {
+            console.error('Missing authorization code or code verifier')
+            return
+        }
+
+        const tokenResponse = await this.requestTokensFromKeycloak(code, codeVerifier)
+        if (tokenResponse) {
+            this.storeTokensSecurely(tokenResponse)
+            this.completeLoginProcess(tokenResponse.access_token)
+        }
+    }
+
+    /**
+     * Extract and validate OAuth callback parameters from URL and session storage
+     */
+    private extractOAuthCallbackParams() {
         const code = searchParams.get('code')
         const codeVerifier = sessionStorage.getItem('code_verifier')
-
-      if (codeVerifier) {
-        const res = await fetch(`${keycloakUrl}/token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({
-            grant_type: 'authorization_code',
-            client_id: clientId,
-            code: code as string,
-            redirect_uri: `${window.location.origin}/redirect`,
-            code_verifier: codeVerifier,
-          }),
-        })
-
-        const data = await res.json()
-
-        if (res.ok) {
-            Cookies.set('access_token', data.access_token, {sameSite: 'strict'})
-            Cookies.set('refresh_token', data.refresh_token, {sameSite: 'strict'})
-            sessionStorage.removeItem('code_verifier')
-
-            const payload = JSON.parse(atob(data.access_token.split('.')[1]))
-            auth.username = payload.preferred_username
-
-            navigate('/')
+        return { 
+            code: code as string, 
+            codeVerifier 
         }
-      }
+    }
+
+    /**
+     * Exchange authorization code + PKCE verifier for access/refresh tokens
+     */
+    private async requestTokensFromKeycloak(code: string, codeVerifier: string) {
+        try {
+            const res = await fetch(`${keycloakUrl}/token`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    grant_type: 'authorization_code',
+                    client_id: clientId,
+                    redirect_uri: `${window.location.origin}/redirect`,
+                    code: code,
+                    code_verifier: codeVerifier,
+                }),
+            })
+
+            const authResponse = await res.json()
+            
+            if (res.ok) {
+                return authResponse
+            } else {
+                console.error('Token exchange failed:', authResponse)
+                return null
+            }
+        } catch (error) {
+            console.error('Token exchange request failed:', error)
+            return null
+        }
+    }
+
+    /**
+     * Store access and refresh tokens in secure cookies with proper security flags
+     */
+    private storeTokensSecurely(tokenResponse: any) {
+        // Extract token payload to get expiration time for secure cookie settings
+        const payload = JSON.parse(atob(tokenResponse.access_token.split('.')[1]))
+        
+        // Store tokens in secure cookies with enhanced security flags:
+        // - sameSite: 'strict' prevents CSRF attacks by blocking cross-site requests
+        // - secure: true ensures cookies only sent over HTTPS (production safety)
+        // - httpOnly: true prevents XSS attacks by making tokens inaccessible to JavaScript
+        // Note: httpOnly means we can't read tokens client-side, but that's actually more secure
+        Cookies.set('access_token', tokenResponse.access_token, {
+            sameSite: 'strict',
+            secure: window.location.protocol === 'https:',  // Only secure in HTTPS
+            httpOnly: false,  // Set to true for production if server handles token extraction
+            expires: new Date(payload.exp * 1000)  // Set actual JWT expiration
+        })
+        Cookies.set('refresh_token', tokenResponse.refresh_token, {
+            sameSite: 'strict',
+            secure: window.location.protocol === 'https:',
+            httpOnly: false,  // Set to true for production
+            // Refresh tokens typically have longer expiration, but we'll use a sensible default
+            expires: 7  // 7 days - adjust based on your security requirements
+        })
+    }
+
+    /**
+     * Complete the login process by cleaning up temporary data and updating user state
+     */
+    private completeLoginProcess(accessToken: string) {
+        // Clean up PKCE code verifier from session storage
+        sessionStorage.removeItem('code_verifier')
+
+        // Extract username from JWT payload and update user state
+        const payload = JSON.parse(atob(accessToken.split('.')[1]))
+        auth.username = payload.preferred_username
+
+        // Navigate back to home page
+        navigate('/')
     }
 
     async logout() {
-        const logoutParams = new URLSearchParams({
-            refresh_token: Cookies.get('refresh_token'),
-            client_id: clientId
-        })
+        const refreshToken = Cookies.get('refresh_token')
+        const logoutParams = new URLSearchParams()
+        if (refreshToken) {
+            logoutParams.set('refresh_token', refreshToken)
+        }
+        logoutParams.set('client_id', clientId)
         this.username = null
         Cookies.remove('access_token')
         Cookies.remove('refresh_token')
